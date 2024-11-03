@@ -10,28 +10,33 @@ URN_ENCODING_JSON = "urn:ietf:capability:https-notif-receiver:encoding:json"
 URN_ENCODING_XML = "urn:ietf:capability:https-notif-receiver:encoding:xml"
 JSON_RECEIVER_CAPABILITIES = "receiver-capabilities"
 JSON_RECEIVER_CAPABILITY = "receiver-capability"
-
+# Define constants for media types
+MIME_APPLICATION_XML = "application/xml"
+MIME_APPLICATION_JSON = "application/json"
+MIME_ALL = "*/*"
 
 
 app = Flask(__name__)
 
 def read_data_set_server_capabilities(data_file_path):
-    # Initialize capability flags
+    # Initialize capability flags and data storage
     json_capable = False
     xml_capable = False
+    capabilities_data = []
 
     # Check the file extension to determine parsing method
     if data_file_path.endswith('.xml'):
-        json_capable, xml_capable = parse_xml_capabilities(data_file_path)
+        json_capable, xml_capable, capabilities_data = parse_xml_capabilities(data_file_path)
     elif data_file_path.endswith('.json'):
-        json_capable, xml_capable = parse_json_capabilities(data_file_path)
+        json_capable, xml_capable, capabilities_data = parse_json_capabilities(data_file_path)
 
-    return json_capable, xml_capable
+    return json_capable, xml_capable, capabilities_data
 
 def parse_xml_capabilities(data_file_path):
-    # Initialize capability flags
+    # Initialize capability flags and data storage
     json_capable = False
     xml_capable = False
+    capabilities_data = []
 
     # Parse the XML file
     tree = ET.parse(data_file_path)
@@ -43,17 +48,19 @@ def parse_xml_capabilities(data_file_path):
 
         if receiver_capability is not None:
             capability_value = receiver_capability.text
+            capabilities_data.append(capability_value)
             if capability_value == URN_ENCODING_JSON:
                 json_capable = True
             elif capability_value == URN_ENCODING_XML:
                 xml_capable = True
 
-    return json_capable, xml_capable
+    return json_capable, xml_capable, capabilities_data
 
 def parse_json_capabilities(data_file_path):
-    # Initialize capability flags
+    # Initialize capability flags and data storage
     json_capable = False
     xml_capable = False
+    capabilities_data = []
 
     # Read and parse the JSON file
     with open(data_file_path, 'r') as json_file:
@@ -64,12 +71,32 @@ def parse_json_capabilities(data_file_path):
         capabilities = receiver_capabilities.get(JSON_RECEIVER_CAPABILITY, [])
 
         for capability_value in capabilities:
+            capabilities_data.append(capability_value)
             if capability_value == URN_ENCODING_JSON:
                 json_capable = True
             elif capability_value == URN_ENCODING_XML:
                 xml_capable = True
 
-    return json_capable, xml_capable
+    return json_capable, xml_capable, capabilities_data
+
+def build_xml(capabilities_data):
+    # Create XML string from capabilities data
+    xml_content = f'<capabilities xmlns="{NAMESPACE}">\n'
+    for capability in capabilities_data:
+        xml_content += f'  <receiver-capabilities>\n'
+        xml_content += f'    <receiver-capability>{capability}</receiver-capability>\n'
+        xml_content += f'  </receiver-capabilities>\n'
+    xml_content += '</capabilities>'
+    return xml_content
+
+def build_json(capabilities_data):
+    # Create JSON structure from capabilities data
+    json_content = {
+        JSON_RECEIVER_CAPABILITIES: {
+            JSON_RECEIVER_CAPABILITY: capabilities_data
+        }
+    }
+    return json.dumps(json_content, indent=2)
 
 def call_c_program(data_file_path, yang_model_path):
     # Call the C program using subprocess
@@ -92,11 +119,6 @@ def call_c_program(data_file_path, yang_model_path):
         print(f"C program failed with return code: {result.returncode}")
         return False
 
-# Define constants for media types
-MIME_APPLICATION_XML = "application/xml"
-MIME_APPLICATION_JSON = "application/json"
-MIME_ALL = "*/*"
-
 def get_q_value(accept_header, media_type):
     """Extracts the q value for a specific media type from the Accept header."""
     pattern = re.compile(rf"{media_type}(;q=([0-9.]+))?")
@@ -109,12 +131,12 @@ def get_q_value(accept_header, media_type):
 def get_default_response(json_capable, xml_capable):
     """Return the default response based on capabilities."""
     if xml_capable:
-        return "<data>Your XML response here</data>", 200, {'Content-Type': MIME_APPLICATION_XML}
+        return build_xml(capabilities_data), 200, {'Content-Type': MIME_APPLICATION_XML}
     elif json_capable:
-        return jsonify({"data": "Your JSON response here"}), 200
+        return build_json(capabilities_data), 200, {'Content-Type': MIME_APPLICATION_JSON}
     return jsonify({"error": "No valid capabilities found"}), 500
 
-def respond_with_content_type(accept_header, json_capable, xml_capable):
+def respond_with_content_type(accept_header, json_capable, xml_capable, capabilities_data):
     """Respond based on the Accept header and content capabilities considering q-values, prioritizing XML."""
     q_xml = get_q_value(accept_header, MIME_APPLICATION_XML)
     q_json = get_q_value(accept_header, MIME_APPLICATION_JSON)
@@ -125,11 +147,11 @@ def respond_with_content_type(accept_header, json_capable, xml_capable):
 
     # Prefer XML if available and has a higher or equal q value
     if xml_capable and (q_xml >= q_json or not json_capable):
-        return "<data>Your XML response here</data>", 200, {'Content-Type': MIME_APPLICATION_XML}
+        return build_xml(capabilities_data), 200, {'Content-Type': MIME_APPLICATION_XML}
 
     # If JSON is preferred, check if it's capable
     if json_capable and q_json > 0:
-        return jsonify({"data": "Your JSON response here"}), 200
+        return build_json(capabilities_data), 200, {'Content-Type': MIME_APPLICATION_JSON}
 
     return jsonify({"error": "Not acceptable"}), 406
 
@@ -143,7 +165,7 @@ def get_capabilities():
 
     if yang_valid:
         # the data in the datastore is valid
-        json_capable,xml_capable = read_data_set_server_capabilities(data_file_path)
+        json_capable, xml_capable, capabilities_data = read_data_set_server_capabilities(data_file_path)
     else:
         # internal server error as the capabilities are not 
         # corresponding to the YANG data model
@@ -155,7 +177,7 @@ def get_capabilities():
     print(f"DEBUG: Accept header: {accept_header}")
 
     if accept_header:
-        return respond_with_content_type(accept_header, json_capable, xml_capable)
+        return respond_with_content_type(accept_header, json_capable, xml_capable, capabilities_data)
 
     # If no Accept header is provided, return the default response
     return get_default_response(json_capable, xml_capable)
