@@ -1,0 +1,11 @@
+<capabilities xmlns="urn:ietf:params:xml:ns:yang:example">
+  <receiver-capabilities>
+    <receiver-capability>urn:ietf:capability:https-notif-receiver:encoding:json</receiver-capability>
+  </receiver-capabilities>
+  <receiver-capabilities>
+    <receiver-capability>urn:ietf:capability:https-notif-receiver:encoding:xml</receiver-capability>
+  </receiver-capabilities>
+  <receiver-capabilities>
+    <receiver-capability>urn:ietf:capability:https-notif-receiver:sub-notif</receiver-capability>
+  </receiver-capabilities>
+</capabilities>

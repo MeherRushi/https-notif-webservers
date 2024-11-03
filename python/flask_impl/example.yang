@@ -1,0 +1,39 @@
+module example {
+  namespace "urn:ietf:params:xml:ns:yang:example";
+  prefix ex;
+
+  organization
+    "IETF Network Working Group";
+
+  contact
+    "WG Web:   <https://datatracker.ietf.org/wg/netconf/>
+     WG List:  <mailto:netconf@ietf.org>
+     Author:   <mailto:author@ietf.org>";
+
+  description
+    "YANG module for defining receiver capabilities.";
+
+  revision "2024-10-25" {
+    description
+      "Initial revision.";
+    reference
+      "RFC XXXX: Receiver Capabilities YANG Model";
+  }
+
+  container capabilities {
+    description
+      "Container for receiver's capabilities.";
+
+    list receiver-capabilities {
+      key "receiver-capability";
+      description
+        "List of capabilities supported by the receiver.";
+
+      leaf receiver-capability {
+        type string;
+        description
+          "Specific capability supported by the receiver.";
+      }
+    }
+  }
+}
