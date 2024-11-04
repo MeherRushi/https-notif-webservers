@@ -1,10 +1,10 @@
 
-# Flask Implemtation
+# Fast API Implemtation
 
-- Flask is based on ASGI based implemenation - based on uvicorn
+- Fast API is based on ASGI based implemenation - based on uvicorn
 
 
-- Here, we enable SSL using  certificates while `app.run(ssl_context='adhoc') ` and they are generated using the following command
+- Here, we enable SSL using certificates  and they are generated using the following command
 
 ```bash
 openssl req -x509 -newkey rsa:2048 -keyout keyfile.pem -out certfile.pem -days 365 -nodes
@@ -13,5 +13,6 @@ openssl req -x509 -newkey rsa:2048 -keyout keyfile.pem -out certfile.pem -days 3
 - command to run 
 
 ```bash
- flask run --host=127.0.0.1 --port=8080 --cert=adhoc
+uvicorn main:app --host 127.0.0.1 --port 8000 --ssl-keyfile keyfile.pem --ssl-certfile certfile.pem --reload
+
 ```
