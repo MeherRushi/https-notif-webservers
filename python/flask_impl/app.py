@@ -1,10 +1,10 @@
-from flask import Flask, request, jsonify
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse, Response
 import json
 import xml.etree.ElementTree as ET
 import subprocess
 import re
 from http import HTTPStatus
-
 
 # Define constants for the URNs, namespace, and JSON keys
 NAMESPACE = "urn:ietf:params:xml:ns:yang:example"
@@ -15,16 +15,15 @@ JSON_RECEIVER_CAPABILITY = "receiver-capability"
 UHTTPS_CONTENT_TYPE = 'Content-Type'
 UHTTPS_ACCEPT = 'Accept'
 
-
 # Define constants for media types
 MIME_APPLICATION_XML = "application/xml"
 MIME_APPLICATION_JSON = "application/json"
 
 # Define file paths
-data_file_path = "example-config.xml"  # Make this configurable
-yang_model_path = "example.yang"         # Make this configurable
+data_file_path = "../../get_yang_files_and_validators/example-config.xml"  # Make this configurable
+yang_model_path = "../../get_yang_files_and_validators/example.yang"         # Make this configurable
 
-app = Flask(__name__)
+app = FastAPI()
 
 def read_data_set_server_capabilities(data_file_path):
     """Reads server capabilities from the given data file, returning capability flags and data."""
@@ -88,7 +87,7 @@ def build_json(capabilities_data):
 def call_c_program(data_file_path, yang_model_path):
     """Calls the C program to validate the YANG model against the data file."""
     result = subprocess.run(
-        ["./yang_validate", data_file_path, yang_model_path],
+        ["../../get_yang_files_and_validators/yang_validate", data_file_path, yang_model_path],
         capture_output=True,
         text=True
     )
@@ -109,12 +108,14 @@ def get_q_value(accept_header, media_type):
     return 0.0
 
 def get_default_response(json_capable, xml_capable, capabilities_data):
-    """Returns the default response based on capabilities."""
+    """Returns the default response based on capabilities.
+    If the desired header field is not present, the server can choose the format it prefers
+    reference link : https://stackoverflow.com/questions/51006471/accept-header-in-http-request"""
     if xml_capable:
-        return build_xml(capabilities_data), HTTPStatus.OK, {'Content-Type': MIME_APPLICATION_XML}
+        return Response(content=build_xml(capabilities_data), media_type=MIME_APPLICATION_XML, status_code=HTTPStatus.OK)
     elif json_capable:
-        return build_json(capabilities_data), HTTPStatus.OK, {'Content-Type': MIME_APPLICATION_JSON}
-    return jsonify({"error": "No valid capabilities found"}), HTTPStatus.INTERNAL_SERVER_ERROR
+        return JSONResponse(content=json.loads(build_json(capabilities_data)), status_code=HTTPStatus.OK)
+    return JSONResponse(content={"error": "No valid capabilities found"}, status_code=HTTPStatus.INTERNAL_SERVER_ERROR)
 
 def respond_with_content_type(accept_header, json_capable, xml_capable, capabilities_data):
     """Responds based on the Accept header and content capabilities, considering q-values."""
@@ -122,37 +123,36 @@ def respond_with_content_type(accept_header, json_capable, xml_capable, capabili
     q_json = get_q_value(accept_header, MIME_APPLICATION_JSON)
 
     if q_xml < 0 or q_json < 0 or q_xml > 1 or q_json > 1: 
-        return jsonify({"error": "Invalid q value"}), HTTPStatus.BAD_REQUEST
+        return JSONResponse(content={"error": "Invalid q value"}, status_code=HTTPStatus.BAD_REQUEST)
 
     if q_json == 0 and q_xml == 0:
         return get_default_response(json_capable, xml_capable, capabilities_data)
 
     if xml_capable and (q_xml >= q_json or not json_capable):
-        return build_xml(capabilities_data), HTTPStatus.OK, {'Content-Type': MIME_APPLICATION_XML}
+        return Response(content=build_xml(capabilities_data), media_type=MIME_APPLICATION_XML, status_code=HTTPStatus.OK)
 
     if json_capable and q_json > 0:
-        return build_json(capabilities_data), HTTPStatus.OK, {'Content-Type': MIME_APPLICATION_JSON}
+        return JSONResponse(content=json.loads(build_json(capabilities_data)), status_code=HTTPStatus.OK)
 
-    return jsonify({"error": "Not acceptable"}), HTTPStatus.NOT_ACCEPTABLE
+    return JSONResponse(content={"error": "Not acceptable"}, status_code=HTTPStatus.NOT_ACCEPTABLE)
 
-@app.route('/capabilities', methods=['GET'])
-def get_capabilities():
+@app.get("/capabilities")
+async def get_capabilities(request: Request):
     """Handles the /capabilities GET request."""
-
     if call_c_program(data_file_path, yang_model_path):
         json_capable, xml_capable, capabilities_data = read_data_set_server_capabilities(data_file_path)
     else:
-        return jsonify({"error": "Internal error, incorrect data in the datastore"}), HTTPStatus.INTERNAL_SERVER_ERROR
+        raise HTTPException(status_code=500, detail="Internal error, incorrect data in the datastore")
 
-    accept_header = request.headers.get(UHTTPS_ACCEPT)
+    accept_header = request.headers.get(UHTTPS_ACCEPT)  # Retrieve the Accept header
     if accept_header:
         return respond_with_content_type(accept_header, json_capable, xml_capable, capabilities_data)
 
     return get_default_response(json_capable, xml_capable, capabilities_data)
 
-@app.route('/relay-notification', methods=['POST'])
-def post_notification():
-    # Get the Content-Type of the request
+@app.post("/relay-notification")
+async def post_notification(request: Request):
+    """Handles the /relay-notification POST request."""
     req_content_type = request.headers.get(UHTTPS_CONTENT_TYPE)
     response_content_type = None
 
@@ -162,21 +162,21 @@ def post_notification():
     if req_content_type == MIME_APPLICATION_XML:
         response_content_type = MIME_APPLICATION_XML
         if not xml_capable:
-            return jsonify({"error":"XML encoding not supported"}), HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {UHTTPS_CONTENT_TYPE: MIME_APPLICATION_XML}
+            return JSONResponse(content={"error": "XML encoding not supported"}, status_code=HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
 
     # Check for JSON content type and JSON support
     elif req_content_type == MIME_APPLICATION_JSON:
         response_content_type = MIME_APPLICATION_JSON
         if not json_capable:
-            return jsonify({"error":"JSON encoding not supported"}), HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {UHTTPS_CONTENT_TYPE: MIME_APPLICATION_JSON}
+            return JSONResponse(content={"error": "JSON encoding not supported"}, status_code=HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
 
     # Unsupported Content-Type
     else:
-        return jsonify({"error":"Unsupported Media Type"}), HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {UHTTPS_CONTENT_TYPE: req_content_type}
+        return JSONResponse(content={"error": "Unsupported Media Type"}, status_code=HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
 
     # If the Content-Type is supported, respond with 204 No Content
-    return '', HTTPStatus.NO_CONTENT, {UHTTPS_CONTENT_TYPE: response_content_type}
-
+    return Response(status_code=HTTPStatus.NO_CONTENT, media_type=response_content_type)
 
 if __name__ == '__main__':
-    app.run(ssl_context='adhoc')  # Start HTTPS server with a self-signed certificate
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000, ssl_keyfile="keyfile.pem", ssl_certfile="certfile.pem")
