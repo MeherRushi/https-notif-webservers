@@ -55,15 +55,19 @@ def validate_relay_notif(data_string):
     except json.JSONDecodeError:
         # If JSON parsing fails, assume the data is XML and parse it
         print("Data format detected: XML, converting to JSON...")
-        parsed_xml = xmltodict.parse(data_string, process_namespaces=True)
-        parsed_xml = strip_namespace(parsed_xml)
-        # Restructure
-        json_data = {
-            "ietf-https-notif:notification": {
-                "eventTime": parsed_xml["notification"]["eventTime"],
-                "event": parsed_xml["notification"]["event"]
+        try:
+            parsed_xml = xmltodict.parse(data_string, process_namespaces=True)
+            parsed_xml = strip_namespace(parsed_xml)
+            # Restructure
+            json_data = {
+                "ietf-https-notif:notification": {
+                    "eventTime": parsed_xml["notification"]["eventTime"],
+                    "event": parsed_xml["notification"]["event"]
+                }
             }
-        }
+        except Exception as e:
+            return 0
+            
         
     print(json_data)
     # Validate the parsed JSON data against the YANG model
@@ -177,4 +181,4 @@ def post_notification():
         return "relay notification doesn't correspond with the yang module", HTTPStatus.BAD_REQUEST
 
 if __name__ == '__main__':
-    app.run(ssl_context='adhoc')  # Start HTTPS server with a self-signed certificate
+    app.run()  # Start HTTPS server with a self-signed certificate

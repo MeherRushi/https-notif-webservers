@@ -11,7 +11,7 @@
 
 
 ```bash
- flask run --host=127.0.0.1 --port=8080 --cert=adhoc
+flask run --host=127.0.0.1 --port=8080 --cert=../../certs/cert.pem --key=../../certs/key.pem
 ```
 
 
@@ -24,7 +24,7 @@ Eg for valid json data
     "event" : {
         "event-class" : "fault",
         "reporting-entity" : { "card" : "Ethernet0" },
-        "severity" : "major",
+        "severity" : "major"
     }
     }
 }
