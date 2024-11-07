@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 import json
-import xml.etree.ElementTree as ET
-import subprocess
+import yangson
+import xmltodict
 import re
 from http import HTTPStatus
 
@@ -20,52 +20,48 @@ UHTTPS_ACCEPT = 'Accept'
 MIME_APPLICATION_XML = "application/xml"
 MIME_APPLICATION_JSON = "application/json"
 
-# Define file paths
-data_file_path = "../../get_yang_files_and_validators/example-config.xml"  # Make this configurable
-yang_model_path = "../../get_yang_files_and_validators/example.yang"         # Make this configurable
+# collector capabilities
+json_capable = True
+xml_capable = True
+
+# Define your YANG module path and model name
+yang_module_path = "/path/to/your/yang/modules"  # Update with actual path
+yang_model_name = "example-mod"  # Update with actual model name, without .yang extension
+
 
 app = Flask(__name__)
 
-def read_data_set_server_capabilities(data_file_path):
-    """Reads server capabilities from the given data file, returning capability flags and data."""
-    if data_file_path.endswith('.xml'):
-        return parse_xml_capabilities(data_file_path)
-    elif data_file_path.endswith('.json'):
-        return parse_json_capabilities(data_file_path)
-    return False, False, []
+def validate_relay_notif(data_string):
+    # Initialize the YANG data model and context
+    data_model = DataModel.from_fs(yang_module_path, [yang_model_name])
+    context = Context(data_model)
 
-def parse_xml_capabilities(data_file_path):
-    """Parses XML capabilities from the provided file path."""
+    try:
+        # Try to parse the data string as JSON
+        json_data = json.loads(data_string)
+        print("Data format detected: JSON")
+    except json.JSONDecodeError:
+        # If JSON parsing fails, assume the data is XML and parse it
+        print("Data format detected: XML, converting to JSON...")
+        try:
+            json_data = xmltodict.parse(data_string)
+        except Exception as e:
+            print(f"Failed to parse XML: {e}")
+            return
+
+    # Validate the parsed JSON data against the YANG model
+    try:
+        instance = Instance.from_dict(context, json_data)
+        print("Data is valid against the YANG model.")
+    except Exception as e:
+        print(f"Validation error: {e}")
+
+def build_capabilities_data(json_capable, xml_capable):
     capabilities_data = []
-    tree = ET.parse(data_file_path)
-    root = tree.getroot()
-
-    for capability in root.findall(f'{{{NAMESPACE}}}receiver-capabilities'):
-        receiver_capability = capability.find(f'{{{NAMESPACE}}}receiver-capability')
-        if receiver_capability is not None:
-            capability_value = receiver_capability.text
-            capabilities_data.append(capability_value)
-    
-    json_capable = URN_ENCODING_JSON in capabilities_data
-    xml_capable = URN_ENCODING_XML in capabilities_data
-
-    return json_capable, xml_capable, capabilities_data
-
-def parse_json_capabilities(data_file_path):
-    """Parses JSON capabilities from the provided file path."""
-    capabilities_data = []
-    
-    with open(data_file_path, 'r') as json_file:
-        data = json.load(json_file)
-        receiver_capabilities = data.get(JSON_RECEIVER_CAPABILITIES, {})
-        capabilities = receiver_capabilities.get(JSON_RECEIVER_CAPABILITY, [])
-        
-        capabilities_data.extend(capabilities)
-    
-    json_capable = URN_ENCODING_JSON in capabilities_data
-    xml_capable = URN_ENCODING_XML in capabilities_data
-
-    return json_capable, xml_capable, capabilities_data
+    if json_capable:
+        capabilities_data.append(URN_ENCODING_JSON)
+    if xml_capable:
+        capabilities_data.append(URN_ENCODING_XML)
 
 def build_xml(capabilities_data):
     """Builds an XML string from capabilities data."""
@@ -84,20 +80,6 @@ def build_json(capabilities_data):
             JSON_RECEIVER_CAPABILITY: capabilities_data
         }
     }, indent=2)
-
-def call_c_program(data_file_path, yang_model_path):
-    """Calls the C program to validate the YANG model against the data file."""
-    result = subprocess.run(
-        ["../../get_yang_files_and_validators/yang_validate", data_file_path, yang_model_path],
-        capture_output=True,
-        text=True
-    )
-
-    print("C Program Output:")
-    print(result.stdout)
-    print(result.stderr)
-
-    return result.returncode == 0
 
 def get_q_value(accept_header, media_type):
     """Extracts the q value for a specific media type from the Accept header."""
@@ -139,10 +121,7 @@ def respond_with_content_type(accept_header, json_capable, xml_capable, capabili
 def get_capabilities():
     """Handles the /capabilities GET request."""
 
-    if call_c_program(data_file_path, yang_model_path):
-        json_capable, xml_capable, capabilities_data = read_data_set_server_capabilities(data_file_path)
-    else:
-        return jsonify({"error": "Internal error, incorrect data in the datastore"}), HTTPStatus.INTERNAL_SERVER_ERROR
+    capabilities_data = build_capabilities_data(json_capable, xml_capable)
 
     accept_header = request.headers.get(UHTTPS_ACCEPT)
     if accept_header:
@@ -175,8 +154,10 @@ def post_notification():
         return jsonify({"error":"Unsupported Media Type"}), HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {UHTTPS_CONTENT_TYPE: req_content_type}
 
     # If the Content-Type is supported, respond with 204 No Content
-    return '', HTTPStatus.NO_CONTENT, {UHTTPS_CONTENT_TYPE: response_content_type}
-
+    if validate_relay_notif(request.data):
+        return jsonify({"error":"relay notification doesn't correspond with the yang modulek"}), HTTPStatus.BAD_REQUEST, {UHTTPS_CONTENT_TYPE: response_content_type}
+    else:
+        return '', HTTPStatus.NO_CONTENT, {UHTTPS_CONTENT_TYPE: response_content_type}
 
 if __name__ == '__main__':
     app.run(ssl_context='adhoc')  # Start HTTPS server with a self-signed certificate
