@@ -10,10 +10,42 @@
 - We can also generate a certificate using openssl and then use them as mentioned in the reference links (https://blog.miguelgrinberg.com/post/running-your-flask-application-over-https)
 
 
+- dev
 ```bash
 flask run --host=127.0.0.1 --port=8080 --cert=../../certs/cert.pem --key=../../certs/key.pem
 ```
 
+- prod
+```bash
+gunicorn --certfile ../../certs/cert.pem --keyfile ../../certs/key.pem -b 127.0.0.1:8080 app:app
+```
+
+- generating the library yang file for yangson
+
+```bash
+python3 mkylib.py ../../../https-notif-servers/yang_modules/
+```
+```
+{
+  "ietf-yang-library:modules-state": {
+    "module-set-id": "",
+    "module": [
+      {
+        "name": "ietf-https-notif",
+        "revision": "",
+        "namespace": "urn:ietf:params:xml:ns:netconf:notification:1.0",
+        "conformance-type": "implement"
+      },
+      {
+        "name": "ietf-yang-types",
+        "revision": "2013-07-15",
+        "namespace": "urn:ietf:params:xml:ns:yang:ietf-yang-types",
+        "conformance-type": "import"
+      }
+    ]
+  }
+}
+```
 
 Eg for valid json data
 
