@@ -13,6 +13,39 @@ openssl req -x509 -newkey rsa:2048 -keyout keyfile.pem -out certfile.pem -days 3
 - command to run 
 
 ```bash
-uvicorn main:app --host 127.0.0.1 --port 8000 --ssl-keyfile keyfile.pem --ssl-certfile certfile.pem --reload
+uvicorn main:app --host 127.0.0.1 --port 8080 --ssl-keyfile ../../certs/key.pem --ssl-certfile ../../certs/cert.pem
 
 ```
+
+
+Eg for valid json data
+
+```
+{
+    "ietf-https-notif:notification": {
+    "eventTime": "2013-12-21T00:01:00Z",
+    "event" : {
+        "event-class" : "fault",
+        "reporting-entity" : { "card" : "Ethernet0" },
+        "severity" : "major"
+    }
+    }
+}
+```
+
+Eg for valid xml data
+
+```
+<notification xmlns="urn:ietf:params:xml:ns:netconf:notification:1.0">
+  <eventTime>2013-12-21T00:01:00Z</eventTime>
+  <event>
+    <event-class>fault</event-class>
+    <reporting-entity>
+      <card>Ethernet0</card>
+    </reporting-entity>
+    <severity>major</severity>
+  </event>
+</notification>
+```
+
+

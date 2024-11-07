@@ -1,4 +1,4 @@
 python/flask_impl/__pycache__/
 python/fast_api_impl/__pycache__/
-python/fast_api_impl/certfile.pem 
-python/fast_api_impl/keyfile.pem
+certs/cert.pem
+certs/key.pem
