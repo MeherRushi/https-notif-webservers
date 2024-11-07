@@ -175,4 +175,4 @@ def post_notification():
         return "relay notification doesn't correspond with the yang module", HTTPStatus.BAD_REQUEST
 
 if __name__ == '__main__':
-    app.run()  # Start HTTPS server with a self-signed certificate
+    app.run()  

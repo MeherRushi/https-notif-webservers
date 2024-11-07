@@ -12,12 +12,12 @@
 
 - dev
 ```bash
-flask run --host=127.0.0.1 --port=8080 --cert=../../certs/cert.pem --key=../../certs/key.pem
+flask run --host=127.0.0.1 --port=8080 --cert=../../certs/server.crt --key=../../certs/server.key
 ```
 
 - prod
 ```bash
-gunicorn --certfile ../../certs/cert.pem --keyfile ../../certs/key.pem -b 127.0.0.1:8080 app:app
+gunicorn -w 5 --certfile ../../certs/server.crt --keyfile ../../certs/server.key -b 127.0.0.1:8080 app:app
 ```
 
 - generating the library yang file for yangson

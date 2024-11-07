@@ -70,66 +70,182 @@ following : Workers = 2 * number of CPU cores + 1
 
 ame machine for client and erver, o I ill run  2 core each
 
-running :
+running Flak:
 ```
-gunicorn -w 9 -b 127.0.0.1:8080 app:app n --certfile ../../certs/cert.pem --keyfile ../../certs/key.pem
-```
+gunicorn -w 5 --certfile=../../certs/server.crt --keyfile=../../certs/server.key -b 127.0.0.1:4433 app:app```
 
 results 
 
 for get capabilitie:
 
 ```
- wrk -t4 -c100 -d30s https://127.0.0.1:8080/capabilities
-Running 30s test @ https://127.0.0.1:8080/capabilities
-  4 threads and 100 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     4.17ms    2.17ms  17.90ms   61.85%
-    Req/Sec    60.06     38.52   215.00     72.38%
-  6351 requests in 30.08s, 2.39MB read
-Requests/sec:    211.16
-Transfer/sec:     81.45KB
+$ go-wrk -no-vr -c 100 -d 30 -cpus 2 https://localhost:4433/capabilities
+---------------
+Running 30s test @ https://localhost:4433/capabilities
+  100 goroutine(s) running concurrently
+22081 requests in 30.079141505s, 7.56MB read
+Requests/sec:		734.10
+Transfer/sec:		257.36KB
+Overall Requests/sec:	730.99
+Overall Transfer/sec:	256.27KB
+Fastest Request:	17.969ms
+Avg Req Time:		136.221ms
+Slowest Request:	192.599ms
+Number of Errors:	0
+10%:			42.151ms
+50%:			118.883ms
+75%:			119.795ms
+99%:			120.323ms
+99.9%:			120.359ms
+99.9999%:		120.359ms
+99.99999%:		120.359ms
+
+
 ```
 
-for get capablitie ith changing header
-```
-$ wrk -t4 -c100 -d30s -s get_seq.lua https://127.0.0.1:8080
---------------
-Running 30s test @ https://127.0.0.1:8080
-  4 threads and 100 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     4.22ms    2.27ms  40.02ms   63.29%
-    Req/Sec    60.36     42.86   222.00     70.08%
-  6292 requests in 30.08s, 2.28MB read
-Requests/sec:    209.21
-Transfer/sec:     77.70KB
-```
 
 post - xml
 ```
-wrk -t4 -c100 -d30s -H "Content-Type: application/xml" -s post_xml.lua https://127.0.0.1:8080/relay-notification
-Running 30s test @ https://127.0.0.1:8080/relay-notification
-  4 threads and 100 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     4.26ms    2.06ms  17.25ms   62.55%
-    Req/Sec    62.84     40.46   242.00     71.25%
-  6579 requests in 30.07s, 2.16MB read
-  Non-2xx or 3xx responses: 6579
-Requests/sec:    218.80
-Transfer/sec:     73.72KB
+go-wrk -no-vr -M POST -c 100 -d 30 -cpus 2 -H "Content-Type: application/xml" -body @data.xml  https://localhost:4433/relay-notification
+-------------------
+Running 30s test @ https://localhost:4433/relay-notification
+  100 goroutine(s) running concurrently
+20715 requests in 30.085145174s, 1.92MB read
+Requests/sec:		688.55
+Transfer/sec:		65.22KB
+Overall Requests/sec:	685.52
+Overall Transfer/sec:	64.94KB
+Fastest Request:	22.285ms
+Avg Req Time:		145.233ms
+Slowest Request:	223.743ms
+Number of Errors:	0
+10%:			48.553ms
+50%:			126.843ms
+75%:			127.655ms
+99%:			128.007ms
+99.9%:			128.019ms
+99.9999%:		128.019ms
+99.99999%:		128.019ms
+stddev:			18.36ms
+
+
 ```
 
 post json
 
 ```
-wrk -t4 -c100 -d30s -H "Content-Type: application/xml" -s post_json.lua https://127.0.0.1:8080/relay-notification
-Running 30s test @ https://127.0.0.1:8080/relay-notification
-  4 threads and 100 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     4.18ms    2.09ms  18.00ms   64.02%
-    Req/Sec    57.54     30.91   141.00     60.55%
-  6506 requests in 30.08s, 2.14MB read
-  Non-2xx or 3xx responses: 6506
-Requests/sec:    216.29
-Transfer/sec:     72.87KB
+go-wrk -no-vr -M POST -c 100 -d 30 -cpus 2 -H "Content-Type: application/json" -body @data.json  https://localhost:4433/relay-notification
+-------------
+Running 30s test @ https://localhost:4433/relay-notification
+  100 goroutine(s) running concurrently
+21745 requests in 30.066116623s, 2.01MB read
+Requests/sec:		723.24
+Transfer/sec:		68.51KB
+Overall Requests/sec:	720.16
+Overall Transfer/sec:	68.22KB
+Fastest Request:	37.54ms
+Avg Req Time:		138.266ms
+Slowest Request:	170.639ms
+Number of Errors:	0
+10%:			62.113ms
+50%:			125.123ms
+75%:			125.771ms
+99%:			126.087ms
+99.9%:			126.095ms
+99.9999%:		126.095ms
+99.99999%:		126.095ms
+stddev:			9.575ms
+
+```
+
+
+-------------------------------------
+running fast_Api
+
+```
+gunicorn -w 5 --certfile=../../certs/server.crt --keyfile=../../certs/server.key -k uvicorn.workers.UvicornWorker main:app --bind 127.0.0.1:4433
+```
+
+
+for get capabilitie:
+
+```
+$ go-wrk -no-vr -c 100 -d 30 -cpus 2 https://localhost:4433/capabilities
+---------------
+Running 30s test @ https://localhost:4433/capabilities
+  100 goroutine(s) running concurrently
+188870 requests in 29.995154664s, 100.15MB read
+Requests/sec:		6296.68
+Transfer/sec:		3.34MB
+Overall Requests/sec:	6270.42
+Overall Transfer/sec:	3.32MB
+Fastest Request:	2.284ms
+Avg Req Time:		15.88ms
+Slowest Request:	96.843ms
+Number of Errors:	0
+10%:			5.814ms
+50%:			6.951ms
+75%:			7.253ms
+99%:			7.446ms
+99.9%:			7.451ms
+99.9999%:		7.452ms
+99.99999%:		7.452ms
+stddev:			5.667ms
+```
+
+post - xml
+```
+go-wrk -no-vr -M POST -c 100 -d 30 -cpus 2 -H "Content-Type: application/xml" -body @data.xml  https://localhost:4433/relay-notification
+-------------------
+
+Running 30s test @ https://localhost:4433/relay-notification
+  100 goroutine(s) running concurrently
+147359 requests in 29.999537057s, 7.87MB read
+Requests/sec:		4912.04
+Transfer/sec:		268.63KB
+Overall Requests/sec:	4893.13
+Overall Transfer/sec:	267.59KB
+Fastest Request:	2.971ms
+Avg Req Time:		20.357ms
+Slowest Request:	138.543ms
+Number of Errors:	0
+10%:			5.571ms
+50%:			5.899ms
+75%:			6.247ms
+99%:			6.48ms
+99.9%:			6.488ms
+99.9999%:		6.489ms
+99.99999%:		6.489ms
+stddev:			10.694ms
+
+
+
+```
+
+post json
+
+```
+go-wrk -no-vr -M POST -c 100 -d 30 -cpus 2 -H "Content-Type: application/json" -body @data.json  https://localhost:4433/relay-notification
+-------------
+Running 30s test @ https://localhost:4433/relay-notification
+  100 goroutine(s) running concurrently
+167312 requests in 29.996081982s, 8.94MB read
+Requests/sec:		5577.80
+Transfer/sec:		305.04KB
+Overall Requests/sec:	5550.49
+Overall Transfer/sec:	303.54KB
+Fastest Request:	1.183ms
+Avg Req Time:		17.927ms
+Slowest Request:	106.155ms
+Number of Errors:	0
+10%:			5.061ms
+50%:			5.915ms
+75%:			6.166ms
+99%:			6.348ms
+99.9%:			6.358ms
+99.9999%:		6.359ms
+99.99999%:		6.359ms
+stddev:			8.516ms
+
+
 ```

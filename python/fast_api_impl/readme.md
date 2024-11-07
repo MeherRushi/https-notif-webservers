@@ -12,8 +12,8 @@ openssl req -x509 -newkey rsa:2048 -keyout keyfile.pem -out certfile.pem -days 3
 
 - command to run 
 
-```bash
-uvicorn main:app --host 127.0.0.1 --port 8080 --ssl-keyfile ../../certs/key.pem --ssl-certfile ../../certs/cert.pem
+```bash../../certs/server.crt
+uvicorn main:app --host 127.0.0.1 --port 8080 --ssl-keyfile ../../certs/server.key --ssl-certfile 
 
 ```
 

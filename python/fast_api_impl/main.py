@@ -50,10 +50,8 @@ async def validate_relay_notif(data_string):
     try:
         # Try to parse the data string as JSON
         json_data = json.loads(data_string)
-        print("Data format detected: JSON")
     except json.JSONDecodeError:
         # If JSON parsing fails, assume the data is XML and parse it
-        print("Data format detected: XML, converting to JSON...")
         try:
             parsed_xml = xmltodict.parse(data_string, process_namespaces=True)
             parsed_xml = strip_namespace(parsed_xml)
@@ -67,15 +65,12 @@ async def validate_relay_notif(data_string):
         except Exception as e:
             return False
             
-    print(json_data)
     # Validate the parsed JSON data against the YANG model
     try:
         instance = data_model.from_raw(json_data)
         instance.validate(ctype=ContentType.all)
-        print("Data is valid against the YANG model.")
         return True
     except Exception as e:
-        print(f"Validation error: {e}")
         return False
 
 async def build_capabilities_data(json_capable, xml_capable):
