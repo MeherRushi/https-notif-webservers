@@ -1,13 +1,13 @@
 from flask import Flask, request, jsonify
 import json
-import yangson
 import xmltodict
 import re
 from http import HTTPStatus
+from yangson import DataModel
+from yangson.enumerations import ContentType
 
 
 # Define constants for the URNs, namespace, and JSON keys
-NAMESPACE = "urn:ietf:params:xml:ns:yang:example"
 URN_ENCODING_JSON = "urn:ietf:capability:https-notif-receiver:encoding:json"
 URN_ENCODING_XML = "urn:ietf:capability:https-notif-receiver:encoding:xml"
 JSON_RECEIVER_CAPABILITIES = "receiver-capabilities"
@@ -25,17 +25,29 @@ json_capable = True
 xml_capable = True
 
 # Define your YANG module path and model name
-yang_module_path = "/path/to/your/yang/modules"  # Update with actual path
-yang_model_name = "example-mod"  # Update with actual model name, without .yang extension
-
+yang_dir_path = "../../yang_modules/" 
+yang_library_path = "../../yang_modules/yang-library.json" 
 
 app = Flask(__name__)
 
-def validate_relay_notif(data_string):
-    # Initialize the YANG data model and context
-    data_model = DataModel.from_fs(yang_module_path, [yang_model_name])
-    context = Context(data_model)
+# Initialize the YANG data model
+data_model = DataModel.from_file(yang_library_path,[yang_dir_path])
 
+# Custom function to remove namespaces from XML keys
+def strip_namespace(data):
+    if isinstance(data, dict):
+        new_data = {}
+        for key, value in data.items():
+            # Remove namespace prefix
+            stripped_key = key.split(':')[-1] if ':' in key else key
+            new_data[stripped_key] = strip_namespace(value)
+        return new_data
+    elif isinstance(data, list):
+        return [strip_namespace(item) for item in data]
+    else:
+        return data
+
+def validate_relay_notif(data_string):
     try:
         # Try to parse the data string as JSON
         json_data = json.loads(data_string)
@@ -43,18 +55,26 @@ def validate_relay_notif(data_string):
     except json.JSONDecodeError:
         # If JSON parsing fails, assume the data is XML and parse it
         print("Data format detected: XML, converting to JSON...")
-        try:
-            json_data = xmltodict.parse(data_string)
-        except Exception as e:
-            print(f"Failed to parse XML: {e}")
-            return
-
+        parsed_xml = xmltodict.parse(data_string, process_namespaces=True)
+        parsed_xml = strip_namespace(parsed_xml)
+        # Restructure
+        json_data = {
+            "ietf-https-notif:notification": {
+                "eventTime": parsed_xml["notification"]["eventTime"],
+                "event": parsed_xml["notification"]["event"]
+            }
+        }
+        
+    print(json_data)
     # Validate the parsed JSON data against the YANG model
     try:
-        instance = Instance.from_dict(context, json_data)
+        instance = data_model.from_raw(json_data)
+        instance.validate(ctype=ContentType.all)
         print("Data is valid against the YANG model.")
+        return 1
     except Exception as e:
         print(f"Validation error: {e}")
+        return 0
 
 def build_capabilities_data(json_capable, xml_capable):
     capabilities_data = []
@@ -62,15 +82,14 @@ def build_capabilities_data(json_capable, xml_capable):
         capabilities_data.append(URN_ENCODING_JSON)
     if xml_capable:
         capabilities_data.append(URN_ENCODING_XML)
+    return capabilities_data
 
 def build_xml(capabilities_data):
     """Builds an XML string from capabilities data."""
-    xml_content = f'<capabilities xmlns="{NAMESPACE}">\n'
+    xml_content = '<receiver-capabilities>'
     for capability in capabilities_data:
-        xml_content += f'  <receiver-capabilities>\n'
         xml_content += f'    <receiver-capability>{capability}</receiver-capability>\n'
-        xml_content += f'  </receiver-capabilities>\n'
-    xml_content += '</capabilities>'
+    xml_content += '</receiver-capabilities>'
     return xml_content
 
 def build_json(capabilities_data):
@@ -133,31 +152,29 @@ def get_capabilities():
 def post_notification():
     # Get the Content-Type of the request
     req_content_type = request.headers.get(UHTTPS_CONTENT_TYPE)
-    response_content_type = None
 
-    json_capable, xml_capable, _ = read_data_set_server_capabilities(data_file_path)
+    if req_content_type == None:
+        return "Content-type is None -> Empty Body Notification", HTTPStatus.UNSUPPORTED_MEDIA_TYPE
 
     # Check for XML content type and XML support
     if req_content_type == MIME_APPLICATION_XML:
-        response_content_type = MIME_APPLICATION_XML
         if not xml_capable:
-            return jsonify({"error":"XML encoding not supported"}), HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {UHTTPS_CONTENT_TYPE: MIME_APPLICATION_XML}
+            return "XML encoding not supported", HTTPStatus.UNSUPPORTED_MEDIA_TYPE
 
     # Check for JSON content type and JSON support
     elif req_content_type == MIME_APPLICATION_JSON:
-        response_content_type = MIME_APPLICATION_JSON
         if not json_capable:
-            return jsonify({"error":"JSON encoding not supported"}), HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {UHTTPS_CONTENT_TYPE: MIME_APPLICATION_JSON}
+            return "JSON encoding not supported", HTTPStatus.UNSUPPORTED_MEDIA_TYPE
 
     # Unsupported Content-Type
     else:
-        return jsonify({"error":"Unsupported Media Type"}), HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {UHTTPS_CONTENT_TYPE: req_content_type}
+        return "Unsupported Media Type", HTTPStatus.UNSUPPORTED_MEDIA_TYPE
 
     # If the Content-Type is supported, respond with 204 No Content
     if validate_relay_notif(request.data):
-        return jsonify({"error":"relay notification doesn't correspond with the yang modulek"}), HTTPStatus.BAD_REQUEST, {UHTTPS_CONTENT_TYPE: response_content_type}
+        return '', HTTPStatus.NO_CONTENT
     else:
-        return '', HTTPStatus.NO_CONTENT, {UHTTPS_CONTENT_TYPE: response_content_type}
+        return "relay notification doesn't correspond with the yang module", HTTPStatus.BAD_REQUEST
 
 if __name__ == '__main__':
     app.run(ssl_context='adhoc')  # Start HTTPS server with a self-signed certificate

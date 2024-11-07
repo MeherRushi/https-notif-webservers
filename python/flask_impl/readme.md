@@ -13,3 +13,36 @@
 ```bash
  flask run --host=127.0.0.1 --port=8080 --cert=adhoc
 ```
+
+
+Eg for valid json data
+
+```
+{
+    "ietf-https-notif:notification": {
+    "eventTime": "2013-12-21T00:01:00Z",
+    "event" : {
+        "event-class" : "fault",
+        "reporting-entity" : { "card" : "Ethernet0" },
+        "severity" : "major",
+    }
+    }
+}
+```
+
+Eg for valid xml data
+
+```
+<notification xmlns="urn:ietf:params:xml:ns:netconf:notification:1.0">
+  <eventTime>2013-12-21T00:01:00Z</eventTime>
+  <event>
+    <event-class>fault</event-class>
+    <reporting-entity>
+      <card>Ethernet0</card>
+    </reporting-entity>
+    <severity>major</severity>
+  </event>
+</notification>
+```
+
+
