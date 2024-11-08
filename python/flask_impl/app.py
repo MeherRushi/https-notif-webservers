@@ -1,13 +1,13 @@
 from flask import Flask, request, jsonify
 import json
-import xml.etree.ElementTree as ET
-import subprocess
+import xmltodict
 import re
 from http import HTTPStatus
+from yangson import DataModel
+from yangson.enumerations import ContentType
 
 
 # Define constants for the URNs, namespace, and JSON keys
-NAMESPACE = "urn:ietf:params:xml:ns:yang:example"
 URN_ENCODING_JSON = "urn:ietf:capability:https-notif-receiver:encoding:json"
 URN_ENCODING_XML = "urn:ietf:capability:https-notif-receiver:encoding:xml"
 JSON_RECEIVER_CAPABILITIES = "receiver-capabilities"
@@ -20,61 +20,74 @@ UHTTPS_ACCEPT = 'Accept'
 MIME_APPLICATION_XML = "application/xml"
 MIME_APPLICATION_JSON = "application/json"
 
-# Define file paths
-data_file_path = "../../get_yang_files_and_validators/example-config.xml"  # Make this configurable
-yang_model_path = "../../get_yang_files_and_validators/example.yang"         # Make this configurable
+# collector capabilities
+json_capable = True
+xml_capable = True
+
+# Define your YANG module path and model name
+yang_dir_path = "../../yang_modules/" 
+yang_library_path = "../../yang_modules/yang-library.json" 
 
 app = Flask(__name__)
 
-def read_data_set_server_capabilities(data_file_path):
-    """Reads server capabilities from the given data file, returning capability flags and data."""
-    if data_file_path.endswith('.xml'):
-        return parse_xml_capabilities(data_file_path)
-    elif data_file_path.endswith('.json'):
-        return parse_json_capabilities(data_file_path)
-    return False, False, []
+# Initialize the YANG data model
+data_model = DataModel.from_file(yang_library_path,[yang_dir_path])
 
-def parse_xml_capabilities(data_file_path):
-    """Parses XML capabilities from the provided file path."""
+# Custom function to remove namespaces from XML keys
+def strip_namespace(data):
+    if isinstance(data, dict):
+        new_data = {}
+        for key, value in data.items():
+            # Remove namespace prefix
+            stripped_key = key.split(':')[-1] if ':' in key else key
+            new_data[stripped_key] = strip_namespace(value)
+        return new_data
+    elif isinstance(data, list):
+        return [strip_namespace(item) for item in data]
+    else:
+        return data
+
+def validate_relay_notif(data_string):
+    try:
+        # Try to parse the data string as JSON
+        json_data = json.loads(data_string)
+    except json.JSONDecodeError:
+        # If JSON parsing fails, assume the data is XML and parse it
+        try:
+            parsed_xml = xmltodict.parse(data_string, process_namespaces=True)
+            parsed_xml = strip_namespace(parsed_xml)
+            # Restructure
+            json_data = {
+                "ietf-https-notif:notification": {
+                    "eventTime": parsed_xml["notification"]["eventTime"],
+                    "event": parsed_xml["notification"]["event"]
+                }
+            }
+        except Exception as e:
+            return 0
+            
+    # Validate the parsed JSON data against the YANG model
+    try:
+        instance = data_model.from_raw(json_data)
+        instance.validate(ctype=ContentType.all)
+        return 1
+    except Exception as e:
+        return 0
+
+def build_capabilities_data(json_capable, xml_capable):
     capabilities_data = []
-    tree = ET.parse(data_file_path)
-    root = tree.getroot()
-
-    for capability in root.findall(f'{{{NAMESPACE}}}receiver-capabilities'):
-        receiver_capability = capability.find(f'{{{NAMESPACE}}}receiver-capability')
-        if receiver_capability is not None:
-            capability_value = receiver_capability.text
-            capabilities_data.append(capability_value)
-    
-    json_capable = URN_ENCODING_JSON in capabilities_data
-    xml_capable = URN_ENCODING_XML in capabilities_data
-
-    return json_capable, xml_capable, capabilities_data
-
-def parse_json_capabilities(data_file_path):
-    """Parses JSON capabilities from the provided file path."""
-    capabilities_data = []
-    
-    with open(data_file_path, 'r') as json_file:
-        data = json.load(json_file)
-        receiver_capabilities = data.get(JSON_RECEIVER_CAPABILITIES, {})
-        capabilities = receiver_capabilities.get(JSON_RECEIVER_CAPABILITY, [])
-        
-        capabilities_data.extend(capabilities)
-    
-    json_capable = URN_ENCODING_JSON in capabilities_data
-    xml_capable = URN_ENCODING_XML in capabilities_data
-
-    return json_capable, xml_capable, capabilities_data
+    if json_capable:
+        capabilities_data.append(URN_ENCODING_JSON)
+    if xml_capable:
+        capabilities_data.append(URN_ENCODING_XML)
+    return capabilities_data
 
 def build_xml(capabilities_data):
     """Builds an XML string from capabilities data."""
-    xml_content = f'<capabilities xmlns="{NAMESPACE}">\n'
+    xml_content = '<receiver-capabilities>'
     for capability in capabilities_data:
-        xml_content += f'  <receiver-capabilities>\n'
         xml_content += f'    <receiver-capability>{capability}</receiver-capability>\n'
-        xml_content += f'  </receiver-capabilities>\n'
-    xml_content += '</capabilities>'
+    xml_content += '</receiver-capabilities>'
     return xml_content
 
 def build_json(capabilities_data):
@@ -84,20 +97,6 @@ def build_json(capabilities_data):
             JSON_RECEIVER_CAPABILITY: capabilities_data
         }
     }, indent=2)
-
-def call_c_program(data_file_path, yang_model_path):
-    """Calls the C program to validate the YANG model against the data file."""
-    result = subprocess.run(
-        ["../../get_yang_files_and_validators/yang_validate", data_file_path, yang_model_path],
-        capture_output=True,
-        text=True
-    )
-
-    print("C Program Output:")
-    print(result.stdout)
-    print(result.stderr)
-
-    return result.returncode == 0
 
 def get_q_value(accept_header, media_type):
     """Extracts the q value for a specific media type from the Accept header."""
@@ -139,10 +138,7 @@ def respond_with_content_type(accept_header, json_capable, xml_capable, capabili
 def get_capabilities():
     """Handles the /capabilities GET request."""
 
-    if call_c_program(data_file_path, yang_model_path):
-        json_capable, xml_capable, capabilities_data = read_data_set_server_capabilities(data_file_path)
-    else:
-        return jsonify({"error": "Internal error, incorrect data in the datastore"}), HTTPStatus.INTERNAL_SERVER_ERROR
+    capabilities_data = build_capabilities_data(json_capable, xml_capable)
 
     accept_header = request.headers.get(UHTTPS_ACCEPT)
     if accept_header:
@@ -154,29 +150,29 @@ def get_capabilities():
 def post_notification():
     # Get the Content-Type of the request
     req_content_type = request.headers.get(UHTTPS_CONTENT_TYPE)
-    response_content_type = None
 
-    json_capable, xml_capable, _ = read_data_set_server_capabilities(data_file_path)
+    if req_content_type == None:
+        return "Content-type is None -> Empty Body Notification", HTTPStatus.UNSUPPORTED_MEDIA_TYPE
 
     # Check for XML content type and XML support
     if req_content_type == MIME_APPLICATION_XML:
-        response_content_type = MIME_APPLICATION_XML
         if not xml_capable:
-            return jsonify({"error":"XML encoding not supported"}), HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {UHTTPS_CONTENT_TYPE: MIME_APPLICATION_XML}
+            return "XML encoding not supported", HTTPStatus.UNSUPPORTED_MEDIA_TYPE
 
     # Check for JSON content type and JSON support
     elif req_content_type == MIME_APPLICATION_JSON:
-        response_content_type = MIME_APPLICATION_JSON
         if not json_capable:
-            return jsonify({"error":"JSON encoding not supported"}), HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {UHTTPS_CONTENT_TYPE: MIME_APPLICATION_JSON}
+            return "JSON encoding not supported", HTTPStatus.UNSUPPORTED_MEDIA_TYPE
 
     # Unsupported Content-Type
     else:
-        return jsonify({"error":"Unsupported Media Type"}), HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {UHTTPS_CONTENT_TYPE: req_content_type}
+        return "Unsupported Media Type", HTTPStatus.UNSUPPORTED_MEDIA_TYPE
 
     # If the Content-Type is supported, respond with 204 No Content
-    return '', HTTPStatus.NO_CONTENT, {UHTTPS_CONTENT_TYPE: response_content_type}
-
+    if validate_relay_notif(request.data):
+        return '', HTTPStatus.NO_CONTENT
+    else:
+        return "relay notification doesn't correspond with the yang module", HTTPStatus.BAD_REQUEST
 
 if __name__ == '__main__':
-    app.run(ssl_context='adhoc')  # Start HTTPS server with a self-signed certificate
+    app.run()  

@@ -1,0 +1,36 @@
+module ietf-https-notif {
+  namespace "urn:ietf:params:xml:ns:netconf:notification:1.0";
+  prefix "notif";
+
+  import ietf-yang-types {
+    prefix "yang";
+  }
+
+  // Container for notifications
+  container notification {
+    leaf eventTime {
+      type yang:date-and-time;
+      description "Time when the event occurred.";
+    }
+
+    container event {
+      // No need for `if-feature` here; remove it or replace with proper feature handling
+      leaf event-class {
+        type string;
+        description "Class of the event.";
+      }
+
+      container reporting-entity {
+        leaf card {
+          type string;
+          description "Reporting entity's card identifier.";
+        }
+      }
+
+      leaf severity {
+        type string;
+        description "Severity of the event.";
+      }
+    }
+  }
+}
