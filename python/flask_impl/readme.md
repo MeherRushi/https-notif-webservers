@@ -17,7 +17,7 @@ flask run --host=127.0.0.1 --port=8080 --cert=../../certs/server.crt --key=../..
 
 - prod
 ```bash
-gunicorn -w 5 --certfile ../../certs/server.crt --keyfile ../../certs/server.key -b 127.0.0.1:8080 app:app
+gunicorn -w 5 --certfile ../../certs/server.crt --keyfile ../../certs/server.key -b 127.0.0.1:4433 app:app
 ```
 
 - generating the library yang file for yangson

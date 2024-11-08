@@ -70,13 +70,16 @@ following : Workers = 2 * number of CPU cores + 1
 
 ame machine for client and erver, o I ill run  2 core each
 
-running Flak:
+## 100 client(go routine)
+
+## Flak:
 ```
 gunicorn -w 5 --certfile=../../certs/server.crt --keyfile=../../certs/server.key -b 127.0.0.1:4433 app:app```
+```
 
 results 
 
-for get capabilitie:
+####  get capabilitie:
 
 ```
 $ go-wrk -no-vr -c 100 -d 30 -cpus 2 https://localhost:4433/capabilities
@@ -103,8 +106,7 @@ Number of Errors:	0
 
 ```
 
-
-post - xml
+#### post - xml
 ```
 go-wrk -no-vr -M POST -c 100 -d 30 -cpus 2 -H "Content-Type: application/xml" -body @data.xml  https://localhost:4433/relay-notification
 -------------------
@@ -131,7 +133,7 @@ stddev:			18.36ms
 
 ```
 
-post json
+#### post json
 
 ```
 go-wrk -no-vr -M POST -c 100 -d 30 -cpus 2 -H "Content-Type: application/json" -body @data.json  https://localhost:4433/relay-notification
@@ -160,14 +162,15 @@ stddev:			9.575ms
 
 
 -------------------------------------
-running fast_Api
+
+## fast_Api
 
 ```
 gunicorn -w 5 --certfile=../../certs/server.crt --keyfile=../../certs/server.key -k uvicorn.workers.UvicornWorker main:app --bind 127.0.0.1:4433
 ```
 
 
-for get capabilitie:
+#### get capabilitie:
 
 ```
 $ go-wrk -no-vr -c 100 -d 30 -cpus 2 https://localhost:4433/capabilities
@@ -193,7 +196,7 @@ Number of Errors:	0
 stddev:			5.667ms
 ```
 
-post - xml
+#### post - xml
 ```
 go-wrk -no-vr -M POST -c 100 -d 30 -cpus 2 -H "Content-Type: application/xml" -body @data.xml  https://localhost:4433/relay-notification
 -------------------
@@ -222,7 +225,7 @@ stddev:			10.694ms
 
 ```
 
-post json
+#### post json
 
 ```
 go-wrk -no-vr -M POST -c 100 -d 30 -cpus 2 -H "Content-Type: application/json" -body @data.json  https://localhost:4433/relay-notification
@@ -246,6 +249,164 @@ Number of Errors:	0
 99.9999%:		6.359ms
 99.99999%:		6.359ms
 stddev:			8.516ms
+```
+
+
+---------------------------------------------
+
+## C language
+
+```
+./client_sample 127.0.0.1 4433
+Address type: IPv4 | 4433
+Starting collector on 127.0.0.1:4433
+```
+
+#### get capabilitie:
+
+```
+$ go-wrk -no-vr -c 100 -d 30 -cpus 2 https://localhost:4433/capabilities
+---------------
+
+Running 30s test @ https://localhost:4433/capabilities
+  100 goroutine(s) running concurrently
+10326 requests in 35.69896864s, 1.99MB read
+Requests/sec:		289.25
+Transfer/sec:		57.06KB
+Overall Requests/sec:	139.59
+Overall Transfer/sec:	27.54KB
+Fastest Request:	29.991ms
+Avg Req Time:		71.468ms
+Slowest Request:	24.281087s
+Number of Errors:	2
+Error Counts:		connection reset by peer=2
+10%:			31.035ms
+50%:			32.484ms
+75%:			33.213ms
+99%:			33.923ms
+99.9%:			33.927ms
+99.9999%:		33.927ms
+99.99999%:		33.927ms
+stddev:			634.401ms
+```
+
+#### post - xml
+```
+go-wrk -no-vr -M POST -c 100 -d 30 -cpus 2 -H "Content-Type: application/xml" -body @data.xml  https://localhost:4433/relay-notification
+--------------
+Running 30s test @ https://localhost:4433/relay-notification
+  100 goroutine(s) running concurrently
+3678 requests in 28.62611789s, 337.63KB read
+Requests/sec:		128.48
+Transfer/sec:		11.79KB
+Overall Requests/sec:	33.71
+Overall Transfer/sec:	3.09KB
+Fastest Request:	145.536ms
+Avg Req Time:		584.354ms
+Slowest Request:	30.816255s
+Number of Errors:	32
+Error Counts:		net/http: timeout awaiting response headers=26,connection reset by peer=6
+10%:			177.231ms
+50%:			200.759ms
+75%:			202.983ms
+99%:			204.495ms
+99.9%:			204.647ms
+99.9999%:		204.647ms
+99.99999%:		204.647ms
+stddev:			1.374835s
 
 
 ```
+
+#### post json
+
+```
+go-wrk -no-vr -M POST -c 100 -d 30 -cpus 2 -H "Content-Type: application/json" -body @data.json  https://localhost:4433/relay-notification
+-------------
+Running 30s test @ https://localhost:4433/relay-notification
+  100 goroutine(s) running concurrently
+3974 requests in 29.026181257s, 368.68KB read
+Requests/sec:		136.91
+Transfer/sec:		12.70KB
+Overall Requests/sec:	71.10
+Overall Transfer/sec:	6.60KB
+Fastest Request:	32.339ms
+Avg Req Time:		577.26ms
+Slowest Request:	30.661631s
+Number of Errors:	23
+Error Counts:		net/http: timeout awaiting response headers=22,connection reset by peer=1
+10%:			37.447ms
+50%:			55.013ms
+75%:			61.079ms
+99%:			68.407ms
+99.9%:			68.431ms
+99.9999%:		68.431ms
+99.99999%:		68.431ms
+stddev:			1.628897s
+
+```
+
+
+
+## 500
+
+## Flak
+
+#### get capabilitie
+
+```
+go-wrk -no-vr -c 500 -d 30 -cpus 2 https://localhost:4433/capabilities
+----
+Running 30s test @ https://localhost:4433/capabilities
+  500 goroutine(s) running concurrently
+23108 requests in 30.392993451s, 7.91MB read
+Requests/sec:		760.31
+Transfer/sec:		266.55KB
+Overall Requests/sec:	736.90
+Overall Transfer/sec:	258.35KB
+Fastest Request:	297.744ms
+Avg Req Time:		657.629ms
+Slowest Request:	897.279ms
+Number of Errors:	0
+10%:			318.847ms
+50%:			407.071ms
+75%:			472.543ms
+99%:			541.183ms
+99.9%:			544.895ms
+99.9999%:		544.895ms
+99.99999%:		544.895ms
+stddev:			71.361ms
+```
+
+#### POST xml
+
+```
+go-wrk -no-vr -M POST -c 500 -d 30 -cpus 2 -H "Content-Type: application/xml" -body @data.xml  https://localhost:4433/relay-notification
+Running 30s test @ https://localhost:4433/relay-notification
+  500 goroutine(s) running concurrently
+20696 requests in 30.408015776s, 1.91MB read
+Requests/sec:		680.61
+Transfer/sec:		64.47KB
+Overall Requests/sec:	660.46
+Overall Transfer/sec:	62.56KB
+Fastest Request:	40.448ms
+Avg Req Time:		734.635ms
+Slowest Request:	1.007423s
+Number of Errors:	0
+10%:			85.467ms
+50%:			185.575ms
+75%:			249.639ms
+99%:			310.271ms
+99.9%:			312.911ms
+99.9999%:		312.911ms
+99.99999%:		312.911ms
+stddev:			109.313ms
+```
+
+#### POST json
+
+
+## 1000
+
+
+## 2000
